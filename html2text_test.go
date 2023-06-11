@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"golang.org/x/net/html/atom"
 )
 
 const destPath = "testdata"
@@ -48,7 +50,7 @@ func TestParseUTF8(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		text, err := FromReader(bytes.NewReader(bs))
+		text, err := New().FromReader(bytes.NewReader(bs))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -469,6 +471,125 @@ func TestLinks(t *testing.T) {
 		} else if len(msg) > 0 {
 			t.Log(msg)
 		}
+	}
+}
+
+func TestLinksHandler(t *testing.T) {
+	aHandler := func(a string) (string, error) {
+		return "[ " + a + " ]", nil
+	}
+
+	testCases := []struct {
+		input  string
+		output string
+		Handler
+	}{
+		{
+			`<a></a>`,
+			``,
+			aHandler,
+		},
+		{
+			`<a href=""></a>`,
+			``,
+			aHandler,
+		},
+		{
+			`<a href="http://example.com/"></a>`,
+			`[ http://example.com/ ]`,
+			aHandler,
+		},
+		{
+			`<a href="">Link</a>`,
+			`Link`,
+			aHandler,
+		},
+		{
+			`<a href="http://example.com/">Link</a>`,
+			`Link [ http://example.com/ ]`,
+			aHandler,
+		},
+		{
+			`<a href="http://example.com/"><span class="a">Link</span></a>`,
+			`Link [ http://example.com/ ]`,
+			aHandler,
+		},
+		{
+			"<a href='http://example.com/'>\n\t<span class='a'>Link</span>\n\t</a>",
+			`Link [ http://example.com/ ]`,
+			aHandler,
+		},
+		{
+			"<a href='mailto:contact@example.org'>Contact Us</a>",
+			`Contact Us [ contact@example.org ]`,
+			aHandler,
+		},
+		{
+			"<a href=\"http://example.com:80/~user?aaa=bb&amp;c=d,e,f#foo\">Link</a>",
+			`Link [ http://example.com:80/~user?aaa=bb&c=d,e,f#foo ]`,
+			aHandler,
+		},
+		{
+			"<a title='title' href=\"http://example.com/\">Link</a>",
+			`Link [ http://example.com/ ]`,
+			aHandler,
+		},
+		{
+			"<a href=\"   http://example.com/ \"> Link </a>",
+			`Link [ http://example.com/ ]`,
+			aHandler,
+		},
+		{
+			"<a href=\"http://example.com/a/\">Link A</a> <a href=\"http://example.com/b/\">Link B</a>",
+			`Link A [ http://example.com/a/ ] Link B [ http://example.com/b/ ]`,
+			aHandler,
+		},
+		{
+			"<a href=\"%%LINK%%\">Link</a>",
+			`Link [ %%LINK%% ]`,
+			aHandler,
+		},
+		{
+			"<a href=\"[LINK]\">Link</a>",
+			`Link [ [LINK] ]`,
+			aHandler,
+		},
+		{
+			"<a href=\"{LINK}\">Link</a>",
+			`Link [ {LINK} ]`,
+			aHandler,
+		},
+		{
+			"<a href=\"[[!unsubscribe]]\">Link</a>",
+			`Link [ [[!unsubscribe]] ]`,
+			aHandler,
+		},
+		{
+			"<p>This is <a href=\"http://www.google.com\" >link1</a> and <a href=\"http://www.google.com\" >link2 </a> is next.</p>",
+			`This is link1 [ http://www.google.com ] and link2 [ http://www.google.com ] is next.`,
+			aHandler,
+		},
+		{
+			"<a href=\"http://www.google.com\" >http://www.google.com</a>",
+			`http://www.google.com`,
+			aHandler,
+		},
+	}
+
+	//
+	for _, testCase := range testCases {
+		handlers := map[atom.Atom]Handler{
+			atom.A: testCase.Handler,
+		}
+		msg, err := wantHandlerString(testCase.input, testCase.output, handlers)
+		if len(msg) > 0 {
+			t.Log(msg)
+		}
+
+		if err != nil {
+			t.Error(err)
+		}
+
 	}
 }
 
@@ -904,18 +1025,24 @@ func (m ExactStringMatcher) String() string {
 }
 
 func wantRegExp(input string, outputRE string, options ...Options) (string, error) {
-	return match(input, RegexpStringMatcher(outputRE), options...)
+	return match(New(), input, RegexpStringMatcher(outputRE), options...)
+}
+
+func wantHandlerString(input string, output string, handlers map[atom.Atom]Handler, options ...Options) (string, error) {
+	t := New().SetHandlers(handlers)
+	return match(t, input, ExactStringMatcher(output), options...)
 }
 
 func wantString(input string, output string, options ...Options) (string, error) {
-	return match(input, ExactStringMatcher(output), options...)
+	return match(New(), input, ExactStringMatcher(output), options...)
 }
 
-func match(input string, matcher StringMatcher, options ...Options) (string, error) {
-	text, err := FromString(input, options...)
+func match(t *Html2Text, input string, matcher StringMatcher, options ...Options) (string, error) {
+	text, err := t.FromString(input, options...)
 	if err != nil {
 		return "", err
 	}
+
 	if !matcher.MatchString(text) {
 		return "", fmt.Errorf(`error: input did not match specified expression
 Input:
@@ -999,7 +1126,7 @@ func Example() {
 	</body>
 </html>`
 
-	text, err := FromString(inputHTML, Options{PrettyTables: true})
+	text, err := New().FromString(inputHTML, Options{PrettyTables: true})
 	if err != nil {
 		panic(err)
 	}
