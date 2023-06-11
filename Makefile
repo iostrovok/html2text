@@ -1,19 +1,9 @@
 # Include go binaries into path
 export PATH := $(GOPATH)/bin:$(PATH)
 
-BUILD=$(shell date +%FT%T)
-VERSION= $(shell git rev-parse --short HEAD)
-CURRENT_BRANCH_NAME= $(shell git rev-parse --abbrev-ref HEAD)
-LDFLAGS=-ldflags "-w -s -X main.Version=${VERSION} -X main.Build=${BUILD}"
-
-
 CURDIR := $(shell pwd)
 GOBIN := $(CURDIR)/bin/
 ENV:=GOBIN=$(GOBIN)
-COVERAGE_DIR := $(PWD)/coverage/
-
-SOURCE_PATH := GOBIN=$(GOBIN) CURDIR=$(CURDIR) TEST_SOURCE_PATH=$(PWD) CURRENT_BRANCH_NAME=$(CURRENT_BRANCH_NAME)
-
 
 # full cleaning. Don't use it: it removes outside golang packages for all projects
 clean: ## Remove build artifacts
