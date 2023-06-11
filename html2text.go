@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/olekukonko/tablewriter"
+	"github.com/pkg/errors"
 	"github.com/ssor/bom"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -291,7 +292,13 @@ func (ctx *textifyTraverseContext) handleElement(node *html.Node) error {
 		ctx.isPre = false
 		return err
 
-	case atom.Style, atom.Script, atom.Head:
+	case atom.Style:
+		// Ignore the subtree.
+		return nil
+	case atom.Head:
+		// Ignore the subtree.
+		return nil
+	case atom.Script:
 		// Ignore the subtree.
 		return nil
 
@@ -314,7 +321,7 @@ func (ctx *textifyTraverseContext) paragraphHandler(node *html.Node) error {
 // handleTableElement is only to be invoked when options.PrettyTables is active.
 func (ctx *textifyTraverseContext) handleTableElement(node *html.Node) error {
 	if !ctx.options.PrettyTables {
-		panic("handleTableElement invoked when PrettyTables not active")
+		return errors.New("handleTableElement invoked when PrettyTables not active")
 	}
 
 	switch node.DataAtom {
@@ -475,7 +482,7 @@ func (ctx *textifyTraverseContext) breakLongLines(data string) []string {
 		return []string{data}
 	}
 	var (
-		ret      = []string{}
+		ret      []string
 		runes    = []rune(data)
 		l        = len(runes)
 		existing = ctx.lineLength
@@ -517,7 +524,7 @@ func (ctx *textifyTraverseContext) normalizeHrefLink(link string) string {
 }
 
 // renderEachChild visits each direct child of a node and collects the sequence of
-// textuual representaitons separated by a single newline.
+// textual representations separated by a single newline.
 func (ctx *textifyTraverseContext) renderEachChild(node *html.Node) (string, error) {
 	buf := &bytes.Buffer{}
 	for c := node.FirstChild; c != nil; c = c.NextSibling {

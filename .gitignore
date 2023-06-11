@@ -22,3 +22,9 @@ _testmain.go
 *.exe
 *.test
 *.prof
+
+coverage.out
+coverage.html
+
+.idea/
+vendor/
